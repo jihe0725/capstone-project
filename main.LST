@@ -1,0 +1,1002 @@
+C51 COMPILER V9.52.0.0   MAIN                                                              01/15/2015 09:16:21 PAGE 1   
+
+
+C51 COMPILER V9.52.0.0, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN main.OBJ
+COMPILER INVOKED BY: D:\Program Files\Keil\C51\BIN\C51.EXE main.c OPTIMIZE(2,SPEED) BROWSE DEBUG OBJECTEXTEND TABS(3)
+
+line level    source
+
+   1          #include <reg52.h>
+   2          #include <intrins.h>
+   3          #define uint unsigned int
+   4          #define uchar unsigned char
+   5          
+   6          /*sbit DQ1=P1^0;//ds18b20与单片机连接口
+   7          sbit DQ2=P1^1;//ds18b20与单片机连接口
+   8          sbit DQ3=P1^2;//ds18b20与单片机连接口
+   9          sbit DQ4=P1^3;//ds18b20与单片机连接口
+  10          
+  11          sbit RS=P2^6;
+  12          sbit RW=P2^7;
+  13          sbit EN=P2^5;
+  14          
+  15          sbit SetKey = P2^2;
+  16          sbit UpKey  = P2^1;
+  17          sbit DnKey  = P2^0;
+  18          sbit BEEP   = P2^4;
+  19          
+  20          sbit LED1   = P3^0;
+  21          sbit LED2   = P3^1;
+  22          sbit LED3   = P3^2;
+  23          sbit LED4   = P3^3;
+  24          
+  25          sbit AlarmK   = P3^4;*/
+  26          
+  27          sbit DQ1=P3^4;//ds18b20与单片机连接口
+  28          sbit DQ2=P3^5;//ds18b20与单片机连接口
+  29          sbit DQ3=P3^6;//ds18b20与单片机连接口
+  30          sbit DQ4=P3^7;//ds18b20与单片机连接口
+  31          
+  32          sbit RS=P2^5;
+  33          sbit RW=P2^6;
+  34          sbit EN=P2^7;
+  35          
+  36          sbit SetKey = P1^0;
+  37          sbit UpKey  = P1^1;
+  38          sbit DnKey  = P1^2;
+  39          sbit AlarmK = P1^3;
+  40          
+  41          sbit BEEP   = P2^4;
+  42          
+  43          sbit LED1   = P2^3;
+  44          sbit LED2   = P2^2;
+  45          sbit LED3   = P2^1;
+  46          sbit LED4   = P2^0;
+  47          
+  48          
+  49          uchar data disdata[5];
+  50          uint CurrentT1=0,CurrentT2=0,CurrentT3=0,CurrentT4=0;//温度值
+  51          bit tflag1,tflag2,tflag3,tflag4;//温度正负标志
+  52          bit ch1=1,ch2=1,ch3=1,ch4=1;
+  53          unsigned char chs=0;
+  54          unsigned char Alarm1=0,Alarm2=0,Alarm3=0,Alarm4=0; 
+  55          unsigned char ts=0;
+C51 COMPILER V9.52.0.0   MAIN                                                              01/15/2015 09:16:21 PAGE 2   
+
+  56          
+  57          #define LCD_BUS P0
+  58          
+  59          
+  60          unsigned char fAlarm=0;
+  61          
+  62          unsigned char AlarmTempLow=20,AlarmTempTop=35,Set=0,NG=0;
+  63          
+  64          void SendTempToPC(unsigned char ch);
+  65          
+  66          
+  67          
+  68          
+  69          
+  70          void delayms(uint ms)       //延时xx毫秒
+  71          {
+  72   1         uchar i;
+  73   1         while(ms--)
+  74   1         {
+  75   2            for(i=0;i<120;i++);
+  76   2         }
+  77   1      }
+  78          
+  79          
+  80          
+  81          void command(uint com)   //LCD写指令
+  82          {
+  83   1         RS=0;            //RS为0
+  84   1         LCD_BUS=com;     //装载指令
+  85   1         delayms(5);     //延时5ms
+  86   1         EN=1;           //LCD使能
+  87   1         delayms(5);    //延时5ms
+  88   1         EN=0;          //LCD不使能
+  89   1      }
+  90          
+  91          void write_dat(uchar dat)    //LCD写数据
+  92          {
+  93   1         RS=1;             //RS为1
+  94   1         LCD_BUS=dat;      //装载数据
+  95   1         delayms(5);        //延时5ms
+  96   1         EN=1;              //LCD使能
+  97   1         delayms(5);        //延时5ms
+  98   1         EN=0;              //LCD不使能
+  99   1      }
+ 100          
+ 101          void writestring(uchar x,uchar y,uchar *s) //LCD 写字符串
+ 102          {     
+ 103   1         if (y == 0)  command(0x80 + x);     //表示第一行
+ 104   1         else  command(0xC0 + x);      //表示第二行
+ 105   1             
+ 106   1         while (*s)        //判断是否字符串的结尾
+ 107   1         {     
+ 108   2           write_dat( *s);    //显示当前字符 
+ 109   2            s ++;             //字符串地址加1
+ 110   2         }
+ 111   1      }
+ 112          
+ 113          void writeChar(uchar x,uchar y,uchar s) //LCD 写字符串
+ 114          {     
+ 115   1         if (y == 0)  command(0x80 + x);     //表示第一行
+ 116   1         else  command(0xC0 + x);      //表示第二行
+ 117   1             
+C51 COMPILER V9.52.0.0   MAIN                                                              01/15/2015 09:16:21 PAGE 3   
+
+ 118   1         {     
+ 119   2           write_dat( s);    //显示当前字符 
+ 120   2         }
+ 121   1      }
+ 122          
+ 123          
+ 124          void LCD_Initial()      //LCD初始化
+ 125          {
+ 126   1      
+ 127   1         EN=0;            //LCD不使能
+ 128   1         RW=0;            //RW为0
+ 129   1         command(0x38);    //发送初始化指令
+ 130   1         command(0x0c);    //发送初始化指令
+ 131   1         command(0x06);   //发送初始化指令
+ 132   1         command(0x01);   //发送初始化指令
+ 133   1         command(0x80); //发送LCD初始位置
+ 134   1      }
+ 135          
+ 136          
+ 137          
+ 138          void Usart_Initial(void)
+ 139          {
+ 140   1         SCON = 0x50;
+ 141   1         TMOD = 0x20;
+ 142   1         PCON = 0x00;
+ 143   1         TH1  = 0xfd;
+ 144   1         TL1  = 0xfd;
+ 145   1         EA   = 1;
+ 146   1         ES   = 1;
+ 147   1         TR1  = 1;
+ 148   1         //TR0=0;
+ 149   1         //SBUF = ' ';
+ 150   1         //while(TI == 0);TI = 0;
+ 151   1         delayms(100);
+ 152   1      
+ 153   1      }
+ 154          
+ 155          void SendTempToPC(unsigned char ch)
+ 156          {
+ 157   1         unsigned char i=0;
+ 158   1         unsigned achs=0,tflag;
+ 159   1         unsigned int temp=0;
+ 160   1         //EA=0;
+ 161   1         //ES=0;
+ 162   1         switch(ch)
+ 163   1         {
+ 164   2            case 1:  achs = 'A';tflag=tflag1;temp=CurrentT1;break;
+ 165   2            case 2:  achs = 'B';tflag=tflag2;temp=CurrentT2;break;
+ 166   2            case 3:  achs = 'C';tflag=tflag3;temp=CurrentT3;break;
+ 167   2            case 4:  achs = 'D';tflag=tflag4;temp=CurrentT4;break;
+ 168   2            default: break;
+ 169   2         }
+ 170   1         if(ch<5)
+ 171   1         {
+ 172   2            SBUF = achs;
+ 173   2            while(TI == 0);TI = 0;//delayms(100);
+ 174   2            SBUF = '=';
+ 175   2            while(TI == 0);TI = 0; //delayms(100);
+ 176   2            if(tflag==1)  SBUF = '-';
+ 177   2            else SBUF = '+';
+ 178   2            while(TI == 0);TI = 0;//delayms(100);
+ 179   2            
+C51 COMPILER V9.52.0.0   MAIN                                                              01/15/2015 09:16:21 PAGE 4   
+
+ 180   2            SBUF = temp/1000+0x30;    //百位数
+ 181   2            while(TI == 0);TI = 0;//delayms(100);
+ 182   2            SBUF =temp%1000/100+0x30; //十位数
+ 183   2            while(TI == 0);TI = 0;//delayms(100);
+ 184   2            SBUF =temp%100/10+0x30;   //个位数
+ 185   2            while(TI == 0);TI = 0;//delayms(100);
+ 186   2            SBUF ='.';   //个位数
+ 187   2            while(TI == 0);TI = 0;//delayms(100);
+ 188   2            SBUF =temp%10+0x30;       //小数位
+ 189   2            while(TI == 0);TI = 0;//delayms(100);
+ 190   2            SBUF = '\r';
+ 191   2            while(TI == 0);TI = 0;//delayms(100);
+ 192   2         }
+ 193   1         else
+ 194   1         {
+ 195   2            for(i=0;i<10;i++)
+ 196   2            {
+ 197   3               SBUF = '*';
+ 198   3               while(TI == 0);TI = 0;
+ 199   3            }
+ 200   2            SBUF = '\r';
+ 201   2            while(TI == 0);TI = 0;
+ 202   2         }
+ 203   1         //ES=1;
+ 204   1         EA=1;
+ 205   1         delayms(100);
+ 206   1      }
+ 207          
+ 208          
+ 209          
+ 210          /*************************DS1820程序****************************/
+ 211          void delay_18B20(unsigned char i)//延时1微秒
+ 212          {
+ 213   1         while(i--);
+ 214   1         //delay_18B20(4); //延时52  4
+ 215   1         //delay_18B20(92); //精确延时大于480us,916  100
+ 216   1         //delay_18B20(12);  //142   14
+ 217   1         //delay_18B20(18);  //196   20
+ 218   1         //delay_18B20(9);  //106   10
+ 219   1      }
+ 220          
+ 221          bit ds1820rst1(void)//ds1820复位/
+ 222          { 
+ 223   1         bit x=0;
+ 224   1         DQ1 = 1;          //DQ复位
+ 225   1         delay_18B20(4); //延时8
+ 226   1         DQ1 = 0;          //DQ拉低
+ 227   1         delay_18B20(92); //精确延时大于480us80
+ 228   1         DQ1 = 1;          //拉高
+ 229   1         delay_18B20(13); //14
+ 230   1         x=DQ1;            //稍做延时后 如果x=0则初始化成功 x=1则初始化失败
+ 231   1         delay_18B20(18);  //20
+ 232   1         return x;
+ 233   1      } 
+ 234          
+ 235          uchar ds1820rd1(void)//读数据
+ 236          { 
+ 237   1         unsigned char i=0;
+ 238   1         unsigned char dat = 0;
+ 239   1         for (i=8;i>0;i--)
+ 240   1         {   
+ 241   2            DQ1 = 0; //给脉冲信号
+C51 COMPILER V9.52.0.0   MAIN                                                              01/15/2015 09:16:21 PAGE 5   
+
+ 242   2            dat>>=1;
+ 243   2            DQ1 = 1; //给脉冲信号
+ 244   2            if(DQ1)
+ 245   2            dat|=0x80;
+ 246   2            delay_18B20(9);
+ 247   2         }
+ 248   1         return(dat);
+ 249   1      }
+ 250          
+ 251          void ds1820wr1(uchar wdata)//写数据
+ 252          {
+ 253   1         unsigned char i=0;
+ 254   1         for (i=8; i>0; i--)
+ 255   1         { 
+ 256   2            DQ1 = 0;
+ 257   2            DQ1 = wdata&0x01;
+ 258   2            delay_18B20(9);
+ 259   2            DQ1 = 1;
+ 260   2            wdata>>=1;
+ 261   2         }
+ 262   1      }
+ 263          
+ 264          bit ds1820rst2(void)//ds1820复位/
+ 265          { 
+ 266   1         bit x=0;
+ 267   1         DQ2 = 1;          //DQ复位
+ 268   1         delay_18B20(4); //延时
+ 269   1         DQ2 = 0;          //DQ拉低
+ 270   1         delay_18B20(92); //精确延时大于480us
+ 271   1         DQ2 = 1;          //拉高
+ 272   1         delay_18B20(13); 
+ 273   1         x=DQ2;            //稍做延时后 如果x=0则初始化成功 x=1则初始化失败
+ 274   1         delay_18B20(18);
+ 275   1         return x;
+ 276   1      } 
+ 277          
+ 278          uchar ds1820rd2(void)//读数据/
+ 279          { 
+ 280   1         unsigned char i=0;
+ 281   1         unsigned char dat = 0;
+ 282   1         for (i=8;i>0;i--)
+ 283   1         {   
+ 284   2            DQ2 = 0; //给脉冲信号
+ 285   2            dat>>=1;
+ 286   2            DQ2 = 1; //给脉冲信号
+ 287   2            if(DQ2)
+ 288   2            dat|=0x80;
+ 289   2            delay_18B20(9);
+ 290   2         }
+ 291   1         return(dat);
+ 292   1      }
+ 293          
+ 294          void ds1820wr2(uchar wdata)//写数据/
+ 295          {
+ 296   1         unsigned char i=0;
+ 297   1         for (i=8; i>0; i--)
+ 298   1         { 
+ 299   2            DQ2 = 0;
+ 300   2            DQ2 = wdata&0x01;
+ 301   2            delay_18B20(9);
+ 302   2            DQ2 = 1;
+ 303   2            wdata>>=1;
+C51 COMPILER V9.52.0.0   MAIN                                                              01/15/2015 09:16:21 PAGE 6   
+
+ 304   2         }
+ 305   1      }
+ 306          
+ 307          bit ds1820rst3(void)//s1820复位
+ 308          { 
+ 309   1         bit x=0;
+ 310   1         DQ3 = 1;          //DQ复位
+ 311   1         delay_18B20(4); //延时
+ 312   1         DQ3 = 0;          //DQ拉低
+ 313   1         delay_18B20(92); //精确延时大于480us
+ 314   1         DQ3 = 1;          //拉高
+ 315   1         delay_18B20(13); 
+ 316   1         x=DQ3;            //稍做延时后 如果x=0则初始化成功 x=1则初始化失败
+ 317   1         delay_18B20(18);
+ 318   1         return x;
+ 319   1      } 
+ 320          
+ 321          uchar ds1820rd3(void)//读数据/
+ 322          { 
+ 323   1         unsigned char i=0;
+ 324   1         unsigned char dat = 0;
+ 325   1         for (i=8;i>0;i--)
+ 326   1         {   
+ 327   2            DQ3 = 0; //给脉冲信号
+ 328   2            dat>>=1;
+ 329   2            DQ3 = 1; //给脉冲信号
+ 330   2            if(DQ3)
+ 331   2            dat|=0x80;
+ 332   2            delay_18B20(9);
+ 333   2         }
+ 334   1         return(dat);
+ 335   1      }
+ 336          
+ 337          void ds1820wr3(uchar wdata)//写数据/
+ 338          {
+ 339   1         unsigned char i=0;
+ 340   1         for (i=8; i>0; i--)
+ 341   1         { 
+ 342   2            DQ3 = 0;
+ 343   2            DQ3 = wdata&0x01;
+ 344   2            delay_18B20(9);
+ 345   2            DQ3 = 1;
+ 346   2            wdata>>=1;
+ 347   2         }
+ 348   1      }
+ 349          
+ 350          
+ 351          bit ds1820rst4(void)//ds1820复位/
+ 352          { 
+ 353   1         bit  x=0;
+ 354   1         DQ4 = 1;          //DQ复位
+ 355   1         delay_18B20(4); //延时
+ 356   1         DQ4 = 0;          //DQ拉低
+ 357   1         delay_18B20(92); //精确延时大于480us
+ 358   1         DQ4 = 1;          //拉高
+ 359   1         delay_18B20(13); 
+ 360   1         x=DQ4;            //稍做延时后 如果x=0则初始化成功 x=1则初始化失败
+ 361   1         delay_18B20(18);
+ 362   1         return x;
+ 363   1      } 
+ 364          
+ 365          uchar ds1820rd4(void)//读数据/
+C51 COMPILER V9.52.0.0   MAIN                                                              01/15/2015 09:16:21 PAGE 7   
+
+ 366          { 
+ 367   1         unsigned char i=0;
+ 368   1         unsigned char dat = 0;
+ 369   1         for (i=8;i>0;i--)
+ 370   1         {   
+ 371   2            DQ4 = 0; //给脉冲信号
+ 372   2            dat>>=1;
+ 373   2            DQ4 = 1; //给脉冲信号
+ 374   2            if(DQ4)
+ 375   2            dat|=0x80;
+ 376   2            delay_18B20(9);
+ 377   2         }
+ 378   1         return(dat);
+ 379   1      }
+ 380          
+ 381          void ds1820wr4(uchar wdata)//写数据/
+ 382          {
+ 383   1         unsigned char i=0;
+ 384   1         for (i=8; i>0; i--)
+ 385   1         { 
+ 386   2            DQ4 = 0;
+ 387   2            DQ4 = wdata&0x01;
+ 388   2            delay_18B20(9);
+ 389   2            DQ4 = 1;
+ 390   2            wdata>>=1;
+ 391   2         }
+ 392   1      }
+ 393          
+ 394          void Read_Temperature1(void)//读取温度值并转换//
+ 395          {
+ 396   1         uchar a,b;
+ 397   1         ds1820rst1();    
+ 398   1         ds1820wr1(0xcc);//跳过读序列号/
+ 399   1         ds1820wr1(0x44);//启动温度转换/
+ 400   1         ds1820rst1();    
+ 401   1         ds1820wr1(0xcc);//跳过读序列号/ 
+ 402   1         ds1820wr1(0xbe);//读取温度/ 
+ 403   1         a=ds1820rd1();
+ 404   1         b=ds1820rd1();
+ 405   1         CurrentT1=b;
+ 406   1         CurrentT1<<=8;
+ 407   1         CurrentT1=CurrentT1|a;
+ 408   1         if(CurrentT1<0x0fff)   tflag1=0;
+ 409   1         else   {CurrentT1=~CurrentT1+1;tflag1=1;}
+ 410   1         CurrentT1=(unsigned int)(CurrentT1*10/16);//(0.625));//温度值扩大10倍，精确到1位小数
+ 411   1      }
+ 412          
+ 413          
+ 414          void Read_Temperature2(void)//读取温度值并转换/
+ 415          {
+ 416   1         uchar a,b;
+ 417   1         ds1820rst2();    
+ 418   1         ds1820wr2(0xcc);//跳过读序列号/
+ 419   1         ds1820wr2(0x44);//启动温度转换/
+ 420   1         ds1820rst2();    
+ 421   1         ds1820wr2(0xcc);//跳过读序列号/ 
+ 422   1         ds1820wr2(0xbe);//读取温度/ 
+ 423   1         a=ds1820rd2();
+ 424   1         b=ds1820rd2();
+ 425   1         CurrentT2=b;
+ 426   1         CurrentT2<<=8;
+ 427   1         CurrentT2=CurrentT2|a;
+C51 COMPILER V9.52.0.0   MAIN                                                              01/15/2015 09:16:21 PAGE 8   
+
+ 428   1         if(CurrentT2<0x0fff)   tflag2=0;
+ 429   1         else   {CurrentT2=~CurrentT2+1;tflag2=1;}
+ 430   1         CurrentT2=(unsigned int)(CurrentT2*10/16);////温度值扩大10倍，精确到1位小数
+ 431   1         
+ 432   1      }
+ 433          
+ 434          
+ 435          void Read_Temperature3(void)//读取温度值并转换
+ 436          {
+ 437   1         uchar a,b;
+ 438   1         ds1820rst3();   
+ 439   1         ds1820wr3(0xcc);//跳过读序列号
+ 440   1         ds1820wr3(0x44);//启动温度转换
+ 441   1         ds1820rst3();    
+ 442   1         ds1820wr3(0xcc);//跳过读序列号
+ 443   1         ds1820wr3(0xbe);//读取温度/ 
+ 444   1         a=ds1820rd3();
+ 445   1         b=ds1820rd3();
+ 446   1         CurrentT3=b;
+ 447   1         CurrentT3<<=8;
+ 448   1         CurrentT3=CurrentT3|a;
+ 449   1         if(CurrentT3<0x0fff)   tflag3=0;
+ 450   1         else   {CurrentT3=~CurrentT3+1;tflag3=1;}
+ 451   1         CurrentT3=(unsigned int)(CurrentT3*10/16);////温度值扩大10倍，精确到1位小数
+ 452   1      
+ 453   1      }
+ 454          
+ 455          
+ 456          void Read_Temperature4(void)//读取温度值并转换
+ 457          {
+ 458   1         uchar a,b;
+ 459   1         ds1820rst4();    
+ 460   1         ds1820wr4(0xcc);//跳过读序列号/
+ 461   1         ds1820wr4(0x44);//启动温度转换/
+ 462   1         ds1820rst4();    
+ 463   1         ds1820wr4(0xcc);//跳过读序列号/ 
+ 464   1         ds1820wr4(0xbe);//读取温度/ 
+ 465   1         a=ds1820rd4();
+ 466   1         b=ds1820rd4();
+ 467   1         CurrentT4=b;
+ 468   1         CurrentT4<<=8;
+ 469   1         CurrentT4=CurrentT4|a;
+ 470   1         if(CurrentT4<0x0fff)   tflag4=0;
+ 471   1         else   {CurrentT4=~CurrentT4+1;tflag4=1;}
+ 472   1         CurrentT4=(unsigned int)(CurrentT4*10/16);////温度值扩大10倍，精确到1位小数
+ 473   1      
+ 474   1      }
+ 475          
+ 476          
+ 477          
+ 478          void Display_Temperature(uint vt,uchar tg,uchar x,uchar y)     //显示温度
+ 479          {
+ 480   1         uchar flagdat;
+ 481   1         disdata[0]=vt/1000+0x30;//百位数
+ 482   1         disdata[1]=vt%1000/100+0x30;//十位数
+ 483   1         disdata[2]=vt%100/10+0x30;//个位数
+ 484   1         disdata[3]=vt%10+0x30;//小数位
+ 485   1          
+ 486   1         if(tg==0)   flagdat=43;//正温度不显示符号
+ 487   1         else   flagdat=0x2d;//负温度显示负号:-
+ 488   1         writeChar(x,y,flagdat);//显示符号位
+ 489   1         writeChar(x+1,y,disdata[0]);//显示百位
+C51 COMPILER V9.52.0.0   MAIN                                                              01/15/2015 09:16:21 PAGE 9   
+
+ 490   1         writeChar(x+2,y,disdata[1]);//显示十位 
+ 491   1         writeChar(x+3,y,disdata[2]);//显示个位 
+ 492   1         writeChar(x+4,y,0X2E);//显示小数点 
+ 493   1         writeChar(x+5,y,disdata[3]);//显示小数位
+ 494   1      } 
+ 495          
+ 496          void DispAlData(void)
+ 497          {
+ 498   1         unsigned char i1=0,i2=0,i3=0,i4=0,i5=0,i6=0;
+ 499   1         
+ 500   1         i1 = AlarmTempLow/100;    //获得温度值的百位
+ 501   1         i2 = AlarmTempLow%100/10;   //获得温度值的十位
+ 502   1         i3 = AlarmTempLow%10;       //获得温度值的个位
+ 503   1               
+ 504   1         i4 = AlarmTempTop/100;    //获得温度值的百位
+ 505   1         i5 = AlarmTempTop%100/10;   //获得温度值的十位
+ 506   1         i6 = AlarmTempTop%10;       //获得温度值的个位
+ 507   1         writestring(5,1,"   ");
+ 508   1         writestring(13,1,"     ");
+ 509   1         if(i1!=0)   writeChar(5,1,i1+'0');
+ 510   1         if((i1==0)&&(i2!=0)) writeChar(5,1,i2+'0');
+ 511   1         if(i1!=0) writeChar(6,1,i2+'0');
+ 512   1         if((i1==0)&&(i2==0)) writeChar(5,1,i3+'0');
+ 513   1         else if((i1==0)&&(i2!=0))  writeChar(6,1,i3+'0');
+ 514   1         if((i1!=0))  writeChar(7,1,i3+'0');
+ 515   1               
+ 516   1         if(i4!=0)   writeChar(13,1,i4+'0');
+ 517   1         if((i4==0)&&(i5!=0)) writeChar(13,1,i5+'0');
+ 518   1         if(i4!=0) writeChar(14,1,i5+'0');
+ 519   1         if((i4==0)&&(i5==0)) writeChar(13,1,i6+'0');
+ 520   1         else if((i4==0)&&(i5!=0))  writeChar(14,1,i6+'0');
+ 521   1         if((i4!=0)) writeChar(15,1,i6+'0');
+ 522   1      }
+ 523          
+ 524          void SetFun(void)
+ 525          {
+ 526   1         if(SetKey==0)
+ 527   1         {
+ 528   2            delayms(20);
+ 529   2            if(SetKey==0)
+ 530   2            {
+ 531   3               if(Set<2)   {Set++;writestring(0,1," Low=    Top=   ");}
+ 532   3               else {Set=0;}//writestring(0,1,"                ");}
+ 533   3            }
+ 534   2            
+ 535   2            switch(Set)
+ 536   2            {
+ 537   3               case 0:  writestring(0,1," ");writestring(8,1," ");break;
+ 538   3               case 1:  writestring(0,1,">");writestring(8,1," ");break;
+ 539   3               case 2:  writestring(0,1," ");writestring(8,1,">");break;
+ 540   3            }
+ 541   2            
+ 542   2            DispAlData();
+ 543   2            while(SetKey==0);
+ 544   2         }
+ 545   1         
+ 546   1         if((UpKey==0)&&(Set!=0))
+ 547   1         {
+ 548   2            delayms(20);
+ 549   2            if(UpKey==0)
+ 550   2            {
+ 551   3               switch(Set)
+C51 COMPILER V9.52.0.0   MAIN                                                              01/15/2015 09:16:21 PAGE 10  
+
+ 552   3               {
+ 553   4                  case 1:  if(AlarmTempLow<125) AlarmTempLow++;else AlarmTempLow=125; break;
+ 554   4                  case 2:  if(AlarmTempTop<125) AlarmTempTop++;else AlarmTempTop=125; break;
+ 555   4               }
+ 556   3               DispAlData();
+ 557   3               while(UpKey==0);
+ 558   3            }
+ 559   2         }
+ 560   1         
+ 561   1         if((DnKey==0)&&(Set!=0))
+ 562   1         {
+ 563   2            delayms(20);
+ 564   2            if(DnKey==0)
+ 565   2            {
+ 566   3               switch(Set)
+ 567   3               {
+ 568   4                  case 1:  if(AlarmTempLow>0) AlarmTempLow--;else AlarmTempLow=0; break;
+ 569   4                  case 2:  if(AlarmTempTop>0) AlarmTempTop--;else AlarmTempTop=0; break;
+ 570   4               }
+ 571   3               DispAlData();
+ 572   3               while(DnKey==0);
+ 573   3            }
+ 574   2         }
+ 575   1         
+ 576   1         if(AlarmK==0)  
+ 577   1         {
+ 578   2            delayms(20);
+ 579   2            if(AlarmK==0)
+ 580   2            {
+ 581   3               fAlarm=~fAlarm;
+ 582   3               while(AlarmK==0)  ;
+ 583   3            }
+ 584   2         }
+ 585   1      }
+ 586          
+ 587          
+ 588          
+ 589          void Alarm(void)
+ 590          {
+ 591   1         if(ch1==0)
+ 592   1         {
+ 593   2            if((CurrentT1>(AlarmTempTop*10))||(CurrentT1<(AlarmTempLow*10))||(tflag1==1)) {LED1=0;Alarm1=1;}
+ 594   2            else  {LED1=1;Alarm1=0;}
+ 595   2         }
+ 596   1         if(ch2==0)
+ 597   1         {
+ 598   2            if((CurrentT2>(AlarmTempTop*10))||(CurrentT2<(AlarmTempLow*10))||(tflag2==1)) {LED2=0;Alarm2=1;}
+ 599   2            else  {LED2=1;Alarm2=0;}
+ 600   2         }
+ 601   1         if(ch3==0)
+ 602   1         {
+ 603   2            if((CurrentT3>(AlarmTempTop*10))||(CurrentT3<(AlarmTempLow*10))||(tflag3==1)) {LED3=0;Alarm3=1;}
+ 604   2            else  {LED3=1;Alarm3=0;}
+ 605   2         }
+ 606   1         if(ch4==0)
+ 607   1         {
+ 608   2            if((CurrentT4>(AlarmTempTop*10))||(CurrentT4<(AlarmTempLow*10))||(tflag4==1)) {LED4=0;Alarm4=1;}
+ 609   2            else  {LED4=1;Alarm4=0;}
+ 610   2         }
+ 611   1         
+ 612   1         if(fAlarm!=0)
+ 613   1         {
+C51 COMPILER V9.52.0.0   MAIN                                                              01/15/2015 09:16:21 PAGE 11  
+
+ 614   2            if((Alarm1==1)||(Alarm2==1)||(Alarm3==1)||(Alarm4==1)) {BEEP=0;}
+ 615   2            else BEEP=1;
+ 616   2         }
+ 617   1         else BEEP=1;
+ 618   1      }
+ 619          
+ 620          void OneSensor(void)
+ 621          {
+ 622   1         if(ch1==0)  
+ 623   1         {
+ 624   2            Read_Temperature1(); // //读取温度值
+ 625   2            Display_Temperature(CurrentT1,tflag1,7,0);      //显示温度值
+ 626   2            SendTempToPC(1);
+ 627   2         }
+ 628   1         if(ch2==0)  
+ 629   1         {
+ 630   2            Read_Temperature2(); // //读取温度值
+ 631   2            Display_Temperature(CurrentT2,tflag2,7,0);      //显示温度值
+ 632   2            SendTempToPC(2);
+ 633   2         }
+ 634   1         if(ch3==0)  
+ 635   1         {
+ 636   2            Read_Temperature3(); // //读取温度值
+ 637   2            Display_Temperature(CurrentT3,tflag3,7,0);      //显示温度值
+ 638   2            SendTempToPC(3);
+ 639   2         }
+ 640   1         if(ch4==0)  
+ 641   1         {
+ 642   2            Read_Temperature4(); // //读取温度值
+ 643   2            Display_Temperature(CurrentT4,tflag4,7,0);      //显示温度值
+ 644   2            SendTempToPC(4);
+ 645   2         }
+ 646   1         SendTempToPC(5);
+ 647   1      }
+ 648          
+ 649          void TwoSensor(void)
+ 650          {
+ 651   1         if(ch1==0) 
+ 652   1         {
+ 653   2            Read_Temperature1(); // //读取温度值
+ 654   2            Display_Temperature(CurrentT1,tflag1,1,0);      //显示温度值
+ 655   2            SendTempToPC(1);
+ 656   2            if(ch2==0) 
+ 657   2            {
+ 658   3               Read_Temperature2(); // //读取温度值
+ 659   3               Display_Temperature(CurrentT2,tflag2,10,0);     //显示温度值
+ 660   3               SendTempToPC(2);
+ 661   3            }
+ 662   2            else if(ch3==0) 
+ 663   2            {
+ 664   3               Read_Temperature3(); // //读取温度值
+ 665   3               Display_Temperature(CurrentT3,tflag3,10,0);     //显示温度值
+ 666   3               SendTempToPC(3);
+ 667   3            }
+ 668   2            else if(ch4==0) 
+ 669   2            {
+ 670   3               Read_Temperature4(); // //读取温度值
+ 671   3               Display_Temperature(CurrentT4,tflag4,10,0);     //显示温度值
+ 672   3               SendTempToPC(4);
+ 673   3            }
+ 674   2         }
+ 675   1         else if(ch2==0) 
+C51 COMPILER V9.52.0.0   MAIN                                                              01/15/2015 09:16:21 PAGE 12  
+
+ 676   1         {
+ 677   2            Read_Temperature2(); // //读取温度值
+ 678   2            Display_Temperature(CurrentT2,tflag2,1,0);      //显示温度值
+ 679   2            SendTempToPC(2);
+ 680   2            if(ch3==0) 
+ 681   2            {
+ 682   3               Read_Temperature3(); // //读取温度值
+ 683   3               Display_Temperature(CurrentT3,tflag3,10,0);     //显示温度值
+ 684   3               SendTempToPC(3);
+ 685   3            }
+ 686   2            else if(ch4==0) 
+ 687   2            {
+ 688   3               Read_Temperature4(); // //读取温度值
+ 689   3               Display_Temperature(CurrentT4,tflag4,10,0);     //显示温度值
+ 690   3               SendTempToPC(4);
+ 691   3            }
+ 692   2         }
+ 693   1         else 
+ 694   1         {
+ 695   2            Read_Temperature3(); // //读取温度值
+ 696   2            Display_Temperature(CurrentT3,tflag3,1,0);      //显示温度值
+ 697   2            SendTempToPC(3);
+ 698   2            Read_Temperature4(); // //读取温度值
+ 699   2            Display_Temperature(CurrentT4,tflag4,10,0);     //显示温度值
+ 700   2            SendTempToPC(4);
+ 701   2         }
+ 702   1         SendTempToPC(5);
+ 703   1      }
+ 704          
+ 705          void ThreeSensor(void)
+ 706          {
+ 707   1         if(ch1==0) 
+ 708   1         {
+ 709   2            Read_Temperature1(); // //读取温度值
+ 710   2            Display_Temperature(CurrentT1,tflag1,1,0);      //显示温度值
+ 711   2            SendTempToPC(1);
+ 712   2            if(ch2==0) 
+ 713   2            {
+ 714   3               Read_Temperature2(); // //读取温度值
+ 715   3               Display_Temperature(CurrentT2,tflag2,10,0);     //显示温度值
+ 716   3               SendTempToPC(2);
+ 717   3               if(ch3==0) 
+ 718   3               {
+ 719   4                  Read_Temperature3(); // //读取温度值
+ 720   4                  Display_Temperature(CurrentT3,tflag3,1,1);      //显示温度值
+ 721   4                  SendTempToPC(3);
+ 722   4               }
+ 723   3               else if(ch4==0) 
+ 724   3               {
+ 725   4                  Read_Temperature4(); // //读取温度值
+ 726   4                  Display_Temperature(CurrentT4,tflag4,1,1);      //显示温度值
+ 727   4                  SendTempToPC(4);
+ 728   4               }
+ 729   3            }
+ 730   2            else
+ 731   2            {
+ 732   3               Read_Temperature3(); // //读取温度值
+ 733   3               Display_Temperature(CurrentT3,tflag3,10,0);     //显示温度值
+ 734   3               SendTempToPC(3);
+ 735   3               Read_Temperature4(); // //读取温度值
+ 736   3               Display_Temperature(CurrentT4,tflag4,1,1);      //显示温度值
+ 737   3               SendTempToPC(4);
+C51 COMPILER V9.52.0.0   MAIN                                                              01/15/2015 09:16:21 PAGE 13  
+
+ 738   3            }
+ 739   2         }
+ 740   1         else if(ch2==0) 
+ 741   1         {
+ 742   2            Read_Temperature2(); // //读取温度值
+ 743   2            Display_Temperature(CurrentT2,tflag2,1,0);      //显示温度值
+ 744   2            SendTempToPC(2);
+ 745   2            Read_Temperature3(); // //读取温度值
+ 746   2            Display_Temperature(CurrentT3,tflag3,10,0);     //显示温度值
+ 747   2            SendTempToPC(3);
+ 748   2            Read_Temperature4(); // //读取温度值
+ 749   2            Display_Temperature(CurrentT4,tflag4,1,1);      //显示温度值
+ 750   2            SendTempToPC(4);
+ 751   2         }     
+ 752   1         SendTempToPC(5);  
+ 753   1      }
+ 754          
+ 755          void FourSensor(void)
+ 756          {
+ 757   1         Read_Temperature1(); // //读取温度值
+ 758   1         Display_Temperature(CurrentT1,tflag1,1,0);      //显示温度值
+ 759   1         SendTempToPC(1);
+ 760   1         Read_Temperature2(); // //读取温度值
+ 761   1         Display_Temperature(CurrentT2,tflag2,10,0);     //显示温度值
+ 762   1         SendTempToPC(2);
+ 763   1         Read_Temperature3(); // //读取温度值
+ 764   1         Display_Temperature(CurrentT3,tflag3,1,1);      //显示温度值
+ 765   1         SendTempToPC(3);
+ 766   1         Read_Temperature4(); // //读取温度值
+ 767   1         Display_Temperature(CurrentT4,tflag4,10,1);     //显示温度值
+ 768   1         SendTempToPC(4);
+ 769   1         SendTempToPC(5);
+ 770   1      }
+ 771          
+ 772          void DisplaySensor(void)
+ 773          {
+ 774   1         switch(chs)
+ 775   1         {
+ 776   2            case 1:  
+ 777   2            {
+ 778   3               writestring(0,0,"  CurT=         ");
+ 779   3               writestring(0,1," Low=20  Top=35 ");
+ 780   3            }break;
+ 781   2            case 2:  
+ 782   2            {
+ 783   3               if(ch1==0) 
+ 784   3               {
+ 785   4                  writestring(0,0,"A");
+ 786   4                  if(ch2==0) writestring(9,0,"B");
+ 787   4                  else if(ch3==0) writestring(9,0,"C");
+ 788   4                  else if(ch4==0) writestring(9,0,"D");
+ 789   4               }
+ 790   3               else if(ch2==0) 
+ 791   3               {
+ 792   4                  writestring(0,0,"B");
+ 793   4                  if(ch3==0) writestring(9,0,"C");
+ 794   4                  else if(ch4==0) writestring(9,0,"D");
+ 795   4               }
+ 796   3               else 
+ 797   3               {
+ 798   4                  if(ch3==0) writestring(0,0,"C");
+ 799   4                  if(ch4==0) writestring(9,0,"D");
+C51 COMPILER V9.52.0.0   MAIN                                                              01/15/2015 09:16:21 PAGE 14  
+
+ 800   4               }
+ 801   3               writestring(0,1," Low=20  Top=35 ");
+ 802   3               
+ 803   3            }break;
+ 804   2            case 3:  
+ 805   2            {
+ 806   3               if(ch1==0) 
+ 807   3               {
+ 808   4                  writestring(0,0,"A");
+ 809   4                  if(ch2==0) 
+ 810   4                  {
+ 811   5                     writestring(9,0,"B");
+ 812   5                     if(ch3==0) writestring(0,1,"C");
+ 813   5                     else if(ch4==0) writestring(0,1,"D");
+ 814   5                  }
+ 815   4                  else
+ 816   4                  {
+ 817   5                     writestring(9,0,"C");
+ 818   5                     writestring(0,1,"D");
+ 819   5                  }
+ 820   4               }
+ 821   3               else if(ch2==0) 
+ 822   3               {
+ 823   4                  writestring(0,0,"B");
+ 824   4                  if(ch3==0) writestring(9,0,"C");
+ 825   4                  writestring(0,1,"D");
+ 826   4               }
+ 827   3               writestring(9,1,"        ");
+ 828   3            }break;
+ 829   2            case 4:  
+ 830   2            {
+ 831   3               writestring(0,0,"A        B      ");
+ 832   3               writestring(0,1,"C        D      ");
+ 833   3            }break;
+ 834   2         }
+ 835   1      }
+ 836          
+ 837          void CheckSensor(void)
+ 838          {
+ 839   1         ch1=0;ch2=0;ch3=0;ch4=0;
+ 840   1         chs=0;
+ 841   1         ch1=ds1820rst1();
+ 842   1         ch2=ds1820rst2();
+ 843   1         ch3=ds1820rst3();
+ 844   1         ch4=ds1820rst4();
+ 845   1         delayms(200);
+ 846   1         
+ 847   1         if(ch1==0) {chs++;}
+ 848   1         if(ch2==0) {chs++;}
+ 849   1         if(ch3==0) {chs++;}
+ 850   1         if(ch4==0) {chs++;}
+ 851   1         
+ 852   1         writestring(0,1,"  Get   Sensor  ");writeChar(6,1,chs+'0');delayms(1000);
+ 853   1         while(chs==0) writestring(0,0,"   No Sensor    ");
+ 854   1         writestring(0,0,"                ");
+ 855   1         writestring(0,1,"                ");
+ 856   1         DisplaySensor();
+ 857   1      }
+ 858          
+ 859          
+ 860          
+ 861          
+C51 COMPILER V9.52.0.0   MAIN                                                              01/15/2015 09:16:21 PAGE 15  
+
+ 862          /*void Serial_INT() interrupt 4
+ 863          {
+ 864             if(RI==0) return;
+ 865             ES = 0;
+ 866             RI = 0;
+ 867             RecData  = SBUF;
+ 868             ES = 1;
+ 869             P1=0x00;
+ 870          }*/
+ 871          
+ 872          
+ 873          void SendRunToPC(void)
+ 874          {
+ 875   1         unsigned char i=0;
+ 876   1         SBUF = 'S';
+ 877   1         while(TI == 0);TI = 0;//delayms(100);
+ 878   1         SBUF = 't';
+ 879   1         while(TI == 0);TI = 0;//delayms(100);
+ 880   1         SBUF = 'a';
+ 881   1         while(TI == 0);TI = 0;//delayms(100);
+ 882   1         SBUF = 'r';
+ 883   1         while(TI == 0);TI = 0;//delayms(100);
+ 884   1         SBUF = 't';
+ 885   1         while(TI == 0);TI = 0;//delayms(100);
+ 886   1         SBUF = '\r';
+ 887   1         while(TI == 0);TI = 0;//delayms(100);
+ 888   1         
+ 889   1      }
+ 890          
+ 891          
+ 892          void main(void)
+ 893          {
+ 894   1         unsigned char i=0;
+ 895   1         P2=0xff;
+ 896   1      
+ 897   1         LCD_Initial();  //LCD 初始化
+ 898   1         
+ 899   1         Read_Temperature1(); //读取温度值
+ 900   1         Read_Temperature2(); //读取温度值
+ 901   1         Read_Temperature3(); //读取温度值
+ 902   1         Read_Temperature4(); //读取温度值
+ 903   1         
+ 904   1         writestring(0,0," DS18B20 Alarmer");     //显示“DS18B20 Alarmer”*/
+ 905   1         Usart_Initial();
+ 906   1         SendRunToPC();
+ 907   1         delayms(1000);    //延时1S
+ 908   1         writestring(0,0,"                ");
+ 909   1         writestring(0,1,"                ");
+ 910   1         CheckSensor();
+ 911   1         
+ 912   1         NG=0;
+ 913   1         
+ 914   1         while(1)
+ 915   1         {
+ 916   2            if(Set==0)
+ 917   2            {
+ 918   3               if(chs==1)
+ 919   3               {
+ 920   4                  OneSensor();
+ 921   4               }
+ 922   3               if(chs==2)
+ 923   3               {
+C51 COMPILER V9.52.0.0   MAIN                                                              01/15/2015 09:16:21 PAGE 16  
+
+ 924   4                  TwoSensor();
+ 925   4               }
+ 926   3               if(chs==3)
+ 927   3               {
+ 928   4                  DisplaySensor();
+ 929   4                  ThreeSensor();
+ 930   4                  
+ 931   4               }
+ 932   3               if(chs==4)
+ 933   3               {
+ 934   4                  writestring(0,1,"C");
+ 935   4                  writestring(9,1,"D");
+ 936   4                  FourSensor();
+ 937   4                  
+ 938   4               }
+ 939   3            }
+ 940   2            SetFun();
+ 941   2            Alarm();
+ 942   2            
+ 943   2         }
+ 944   1      
+ 945   1      }
+ 946          
+ 947          
+ 948          
+ 949          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =   4199    ----
+   CONSTANT SIZE    =    184    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     24      61
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =      8       4
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
